@@ -1,5 +1,8 @@
 // References:
 // https://docs.unity3d.com/Packages/com.unity.render-pipelines.universal@14.0/manual/renderer-features/how-to-fullscreen-blit.html
+//
+// This shader implements depth-aware outline rendering using Sobel edge detection.
+// It compares scene depth with outline object depth to handle proper occlusion.
 
 Shader "Custom/Outline"
 {
