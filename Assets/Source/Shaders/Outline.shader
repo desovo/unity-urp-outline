@@ -1,5 +1,8 @@
 // References:
 // https://docs.unity3d.com/Packages/com.unity.render-pipelines.universal@14.0/manual/renderer-features/how-to-fullscreen-blit.html
+//
+// This shader implements depth-aware outline rendering using Sobel edge detection.
+// It compares scene depth with outline object depth to handle proper occlusion.
 
 Shader "Custom/Outline"
 {
@@ -44,8 +47,11 @@ Shader "Custom/Outline"
             };
 
             TEXTURE2D_X(_OutlineMask);
+            TEXTURE2D_X_FLOAT(_OutlineMaskDepth);
+            TEXTURE2D_X_FLOAT(_CameraDepthTexture);
             // https://docs.unity3d.com/Manual/SL-SamplerStates.html
             SAMPLER(sampler_linear_clamp_OutlineMask);
+            SAMPLER(sampler_point_clamp);
 
             half4 _OutlineColor;
             half _OutlineWidth;
@@ -77,6 +83,19 @@ Shader "Custom/Outline"
 
             half4 frag(Varying IN) : SV_Target
             {
+                // 读取场景深度（当前像素的实际深度）。
+                float sceneDepth = SAMPLE_TEXTURE2D_X(_CameraDepthTexture, sampler_point_clamp, IN.uv).r;
+                // 读取轮廓对象的深度。
+                float maskDepth = SAMPLE_TEXTURE2D_X(_OutlineMaskDepth, sampler_point_clamp, IN.uv).r;
+                
+                // Unity使用反向Z，近处=1.0，远处=0.0。
+                // 如果场景深度更近（深度值更大），说明有物体遮挡，不绘制轮廓。
+                // 使用一个小的阈值来避免浮点误差和自遮挡。
+                if (sceneDepth > maskDepth + 0.0001)
+                {
+                    discard;
+                }
+                
                 // Sobel 算子核。
                 const half kernel_y[8] = {
                     -1, -2, -1,

@@ -19,6 +19,7 @@ public class OutlineFeature : ScriptableRendererFeature
         };
         // Shader 属性 ID。
         private static readonly int _outlineMaskId = Shader.PropertyToID("_OutlineMask");
+        private static readonly int _outlineMaskDepthId = Shader.PropertyToID("_OutlineMaskDepth");
         private static readonly int _outlineColorId = Shader.PropertyToID("_OutlineColor");
         private static readonly int _outlineWidthId = Shader.PropertyToID("_OutlineWidth");
         
@@ -27,6 +28,7 @@ public class OutlineFeature : ScriptableRendererFeature
         private FilteringSettings _filteringSettings;
         private readonly MaterialPropertyBlock _propertyBlock;
         private RTHandle _outlineMaskRT;
+        private RTHandle _outlineMaskDepthRT;
         
         public OutlinePass(Material outlineMaterial, OutlineSettings defaultSettings)
         {
@@ -43,6 +45,9 @@ public class OutlineFeature : ScriptableRendererFeature
                 new FilteringSettings(
                     RenderQueueRange.all, 
                     renderingLayerMask: (uint)_defaultSettings.outlineRenderingLayerMask);
+            
+            // 请求深度纹理以进行深度比较。
+            ConfigureInput(ScriptableRenderPassInput.Depth);
         }
         
         /// <summary>
@@ -52,6 +57,8 @@ public class OutlineFeature : ScriptableRendererFeature
         {
             _outlineMaskRT?.Release();
             _outlineMaskRT = null;
+            _outlineMaskDepthRT?.Release();
+            _outlineMaskDepthRT = null;
         }
         
         // This method is called before executing the render pass.
@@ -66,12 +73,20 @@ public class OutlineFeature : ScriptableRendererFeature
             RenderTextureDescriptor desc = renderingData.cameraData.cameraTargetDescriptor;
             // 不需要太高的抗锯齿，因为只是需要外描边目标的遮罩。
             desc.msaaSamples = 1;
-            // 不需要深度缓冲。
-            desc.depthBufferBits = 0;
             // 选择有Alpha通道的颜色格式，后续处理需要。
             desc.colorFormat = RenderTextureFormat.ARGB32;
+            // 不需要颜色纹理的深度缓冲。
+            desc.depthBufferBits = 0;
             // 分配 Mask RT。
             RenderingUtils.ReAllocateIfNeeded(ref _outlineMaskRT, desc, name:"_OutlineMaskRT");
+            
+            // 配置深度纹理。
+            RenderTextureDescriptor depthDesc = renderingData.cameraData.cameraTargetDescriptor;
+            depthDesc.msaaSamples = 1;
+            depthDesc.colorFormat = RenderTextureFormat.Depth;
+            depthDesc.depthBufferBits = 24;
+            // 分配深度 RT。
+            RenderingUtils.ReAllocateIfNeeded(ref _outlineMaskDepthRT, depthDesc, name:"_OutlineMaskDepthRT");
         }
 
         // Here you can implement the rendering logic.
@@ -87,8 +102,8 @@ public class OutlineFeature : ScriptableRendererFeature
             var cmd = CommandBufferPool.Get("Outline");
             
             // ---- 遮罩 RT ---- //
-            // 设置绘制目标为_outlineMaskRT。并在渲染前清空RT。
-            cmd.SetRenderTarget(_outlineMaskRT);
+            // 设置绘制目标为_outlineMaskRT和深度缓冲。并在渲染前清空RT。
+            cmd.SetRenderTarget(_outlineMaskRT, _outlineMaskDepthRT);
             cmd.ClearRenderTarget(true, true, Color.clear);
             
             // 设置绘制属性并添加。
@@ -101,8 +116,9 @@ public class OutlineFeature : ScriptableRendererFeature
             // ---- 外描边 ---- //
             // 设置绘制目标为当前相机的渲染目标。
             cmd.SetRenderTarget(renderingData.cameraData.renderer.cameraColorTargetHandle);
-            // 设置外描边材质属性块，传入 Mask RT。
+            // 设置外描边材质属性块，传入 Mask RT 和深度 RT。
             _propertyBlock.SetTexture(_outlineMaskId, _outlineMaskRT);
+            _propertyBlock.SetTexture(_outlineMaskDepthId, _outlineMaskDepthRT);
             // 绘制一个全屏三角形，使用外描边材质，并传入属性块。
             cmd.DrawProcedural(Matrix4x4.identity, _outlineMaterial, 0, MeshTopology.Triangles, 3, 1, _propertyBlock);
             
