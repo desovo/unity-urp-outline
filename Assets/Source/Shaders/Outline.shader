@@ -85,9 +85,10 @@ Shader "Custom/Outline"
                 // 读取轮廓对象的深度。
                 float maskDepth = SAMPLE_TEXTURE2D_X(_OutlineMaskDepth, sampler_point_clamp, IN.uv).r;
                 
-                // 如果场景深度更近（深度值更小），说明有物体遮挡，不绘制轮廓。
-                // 使用一个小的阈值来避免浮点误差。
-                if (sceneDepth < maskDepth - 0.0001)
+                // Unity使用反向Z，近处=1.0，远处=0.0。
+                // 如果场景深度更近（深度值更大），说明有物体遮挡，不绘制轮廓。
+                // 使用一个小的阈值来避免浮点误差和自遮挡。
+                if (sceneDepth > maskDepth + 0.0001)
                 {
                     discard;
                 }

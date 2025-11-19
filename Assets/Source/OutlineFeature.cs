@@ -45,6 +45,9 @@ public class OutlineFeature : ScriptableRendererFeature
                 new FilteringSettings(
                     RenderQueueRange.all, 
                     renderingLayerMask: (uint)_defaultSettings.outlineRenderingLayerMask);
+            
+            // 请求深度纹理以进行深度比较。
+            ConfigureInput(ScriptableRenderPassInput.Depth);
         }
         
         /// <summary>
